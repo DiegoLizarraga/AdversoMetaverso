@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Antifaz del ladrón fantasma. Las cuencas se recortan con evenOdd. -->
+    <path
+        android:fillColor="#F5F1E8"
+        android:fillType="evenOdd"
+        android:pathData="M22,44 C22,35 35,30 54,30 C73,30 86,35 86,44 C86,60 74,78 54,78 C34,78 22,60 22,44 Z M35,45 L50,40 L54,50 L38,55 Z M73,45 L58,40 L54,50 L70,55 Z" />
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M54,50 L60,56 L54,62 L48,56 Z" />
+</vector>
