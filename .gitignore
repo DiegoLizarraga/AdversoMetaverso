@@ -13,3 +13,12 @@ local.properties
 *.aab
 *.keystore
 !debug.keystore
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+adverso.db
+audit.log

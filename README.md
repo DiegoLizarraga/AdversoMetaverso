@@ -1,5 +1,9 @@
 # AdversoMetaverso
 
+> **Estado:** el proyecto migra de app Android a herramienta de Linux (Debian/Kali)
+> operada por agentes. Ver [`PLAN.md`](PLAN.md). La app original vive en
+> [`legacy/android/`](legacy/android/). El texto de abajo describe esa versión.
+
 > No tengo idea de la cognición humana.
 
 Una app de Android que convierte el tráfico de red de tu teléfono en un Palacio

@@ -1,0 +1,15 @@
+[project]
+name = "adverso"
+version = "0.1.0"
+description = "Metaverso de agentes para Kali/Debian: reconocimiento y monitor con estética Persona 5"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+include = ["adverso*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
