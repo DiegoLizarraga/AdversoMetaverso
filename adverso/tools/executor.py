@@ -46,6 +46,7 @@ class Executor:
         if tool is None:
             return {"ok": False, "error": f"herramienta desconocida: {name}"}
         try:
+            tool.validate(args)
             target = tool.target_of(args)
             cmd = tool.build_command(args)
         except ToolError as e:

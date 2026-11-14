@@ -11,7 +11,7 @@ PROFILES: dict[str, list[str]] = {
     "ping": ["-sn"],
     "rapido": ["-T4", "-F"],
     "servicios": ["-T4", "-sV", "--version-light"],
-    "completo": ["-T4", "-p-"],
+    "completo": ["-T4"],  # todos los puertos salvo que se pase `ports`
 }
 _PORTS = re.compile(r"^[0-9]{1,5}([,-][0-9]{1,5})*$")
 
@@ -24,7 +24,7 @@ class Nmap(Tool):
     parameters = {
         "type": "object",
         "properties": {
-            "target": {"type": "string", "description": "IP, red CIDR o host autorizado"},
+            "target": {"type": "string", "description": "Solo IP, red CIDR o host, SIN puerto (el puerto va en `ports`)"},
             "profile": {"type": "string", "enum": sorted(PROFILES), "default": "rapido"},
             "ports": {"type": "string", "description": "Opcional, ej. '22,80,8000-8100'"},
         },
@@ -32,7 +32,11 @@ class Nmap(Tool):
     }
 
     def target_of(self, args):
-        return require_str(args, "target")
+        t = require_str(args, "target")
+        if re.fullmatch(r"[^:\s]+:\d+", t):  # host:puerto (IPv6 lleva varios ':')
+            host, port = t.rsplit(":", 1)
+            raise ToolError(f"target no lleva puerto: usa target='{host}' y ports='{port}'")
+        return t
 
     def build_command(self, args):
         profile = args.get("profile", "rapido")
@@ -42,8 +46,10 @@ class Nmap(Tool):
         ports = args.get("ports")
         if ports:
             if profile == "ping" or not _PORTS.match(str(ports)):
-                raise ToolError("ports inválido")
+                raise ToolError("ports inválido (no aplica al perfil 'ping')" if profile == "ping" else "ports inválido")
             cmd += ["-p", str(ports)]
+        elif profile == "completo":
+            cmd += ["-p-"]
         return [*cmd, "--", require_str(args, "target")]
 
     def parse(self, stdout, stderr, args):

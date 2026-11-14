@@ -141,3 +141,28 @@ def test_schemas_son_function_calling(tmp_path):
     s = ex.schemas()
     assert {x["function"]["name"] for x in s} == {"nmap_scan", "gobuster_dir"}
     assert "INTRUSIVA" in [x for x in s if x["function"]["name"] == "gobuster_dir"][0]["function"]["description"]
+
+
+def test_validacion_estricta_de_argumentos():
+    n = Nmap()
+    for bad in ({"target": "x", "inventado": 1}, {"profile": "rapido"}, {"target": "x", "profile": "nuclear"}, "texto"):
+        with pytest.raises(ToolError):
+            n.validate(bad)
+    with pytest.raises(ToolError):
+        Gobuster().validate({"url": "http://x", "threads": 99})
+    with pytest.raises(ToolError):
+        Gobuster().validate({"url": "http://x", "threads": "5"})
+    n.validate({"target": "10.0.0.5", "profile": "servicios", "ports": "22"})
+
+
+def test_nmap_completo_con_y_sin_ports():
+    n = Nmap()
+    assert "-p-" in n.build_command({"target": "10.0.0.5", "profile": "completo"})
+    cmd = n.build_command({"target": "10.0.0.5", "profile": "completo", "ports": "8765"})
+    assert "-p-" not in cmd and cmd.count("-p") == 1
+
+
+def test_nmap_target_con_puerto_da_pista():
+    with pytest.raises(ToolError, match="ports='8765'"):
+        Nmap().target_of({"target": "127.0.0.1:8765"})
+    assert Nmap().target_of({"target": "fe80::1"}) == "fe80::1"

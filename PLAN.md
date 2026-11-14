@@ -40,8 +40,14 @@ legacy/android/   app original (referencia)
 | --- | --- | --- |
 | 0 | Esqueleto, modelo y motor de amenazas portados | Tests portados pasan ✅ |
 | 1 | Capa de herramientas (nmap, gobuster, nikto) + guardia de alcance | Escaneo fuera de alcance rechazado; dentro, auditado ✅ |
-| 2 | Agente con modelo local | Un modelo pequeño completa un reconocimiento guiado |
+| 2 | Agente con modelo local | Un modelo pequeño completa un reconocimiento guiado ✅ (qwen3:8b vía Ollama, ~90 s en CPU) |
 | 3 | Adaptador opencode | Misma tarea con otro agente |
 | 4 | Monitor pasivo y TUI | Palacios y Sombras visibles en vivo |
 | 5 | Más herramientas; evaluar servidor MCP propio | masscan, ffuf, nuclei, tshark… cubiertas |
 | 6 | Claude | Al final |
+
+## Notas de la fase 2
+- Hardware de desarrollo: 15 GB de RAM, sin GPU. `qwen3:30b` (18 GB) no es viable (agota 280 s sin responder); `qwen3:8b` sí.
+- El agente tiene modo nativo (tool calling de Ollama) y modo JSON en texto para modelos sin soporte, como `dolphin-mistral`.
+- Pendiente para fase 3: cliente compatible con OpenAI (sirve también para opencode, llama.cpp y colibri).
+- colibri (motor MoE jerárquico con API OpenAI): candidato para modelos grandes, no probado.

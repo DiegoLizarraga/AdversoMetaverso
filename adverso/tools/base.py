@@ -31,6 +31,30 @@ class Tool:
     #: JSON Schema de los argumentos que ve el agente.
     parameters: dict[str, Any] = {}
 
+    def validate(self, args: Any) -> None:
+        """Valida los argumentos contra `parameters`; los errores guían al modelo."""
+        if not isinstance(args, dict):
+            raise ToolError("los argumentos deben ser un objeto JSON")
+        props = self.parameters.get("properties", {})
+        unknown = sorted(set(args) - set(props))
+        if unknown:
+            raise ToolError(f"argumentos desconocidos {unknown}; los válidos son {sorted(props)}")
+        for key in self.parameters.get("required", []):
+            if key not in args:
+                raise ToolError(f"falta el argumento '{key}'")
+        for key, value in args.items():
+            spec = props[key]
+            kind = spec.get("type")
+            if kind == "string" and not isinstance(value, str):
+                raise ToolError(f"'{key}' debe ser texto")
+            if kind == "integer" and (isinstance(value, bool) or not isinstance(value, int)):
+                raise ToolError(f"'{key}' debe ser un entero")
+            if "enum" in spec and value not in spec["enum"]:
+                raise ToolError(f"'{key}' debe ser uno de {spec['enum']}")
+            if kind == "integer":
+                if "minimum" in spec and value < spec["minimum"] or "maximum" in spec and value > spec["maximum"]:
+                    raise ToolError(f"'{key}' fuera de rango ({spec.get('minimum')}-{spec.get('maximum')})")
+
     def target_of(self, args: dict[str, Any]) -> str:
         """Objetivo que debe validar la guardia de alcance."""
         raise NotImplementedError
