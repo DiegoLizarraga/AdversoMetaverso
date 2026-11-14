@@ -39,7 +39,7 @@ legacy/android/   app original (referencia)
 | Fase | Entregable | Hecho cuando |
 | --- | --- | --- |
 | 0 | Esqueleto, modelo y motor de amenazas portados | Tests portados pasan ✅ |
-| 1 | Capa de herramientas (nmap, gobuster, nikto) + guardia de alcance | Escaneo fuera de alcance rechazado; dentro, auditado |
+| 1 | Capa de herramientas (nmap, gobuster, nikto) + guardia de alcance | Escaneo fuera de alcance rechazado; dentro, auditado ✅ |
 | 2 | Agente con modelo local | Un modelo pequeño completa un reconocimiento guiado |
 | 3 | Adaptador opencode | Misma tarea con otro agente |
 | 4 | Monitor pasivo y TUI | Palacios y Sombras visibles en vivo |

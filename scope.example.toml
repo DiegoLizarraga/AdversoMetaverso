@@ -1,0 +1,8 @@
+# Copia a scope.toml y ajusta. Nada se ejecuta contra objetivos que no estén aquí.
+[scope]
+targets = [
+  "192.168.56.0/24",   # red de laboratorio (CIDR)
+  "10.0.0.5",          # IP suelta
+  "lab.local",         # host por nombre
+  "*.corp.test",       # cualquier subdominio
+]
