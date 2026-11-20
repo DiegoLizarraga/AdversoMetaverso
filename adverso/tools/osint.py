@@ -121,6 +121,10 @@ class TheHarvester(Tool):
         return {"hosts": [{"name": n, "ip": ip} for n, ip in sorted(hosts.items())][:300], "emails": sorted(set(emails))[:100]}
 
 
+# Plugins de whatweb que no son tecnologías (metadatos de la respuesta).
+_WHATWEB_NOISE = {"Country", "IP", "Title", "UncommonHeaders", "HTML5", "Email", "Cookies", "Script", "Meta-Author"}
+
+
 class WhatWeb(Tool):
     name = "whatweb_fingerprint"
     binary = "whatweb"
@@ -152,6 +156,8 @@ class WhatWeb(Tool):
         for entry in data if isinstance(data, list) else [data]:
             status = entry.get("http_status", status)
             for name, info in (entry.get("plugins") or {}).items():
+                if name in _WHATWEB_NOISE:
+                    continue
                 vals = [v for k in ("version", "string") for v in (info.get(k) or [])]
                 techs[name] = vals[:3]
         return {"http_status": status, "technologies": techs}

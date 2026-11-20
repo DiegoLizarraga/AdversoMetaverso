@@ -30,8 +30,8 @@ def test_parse_dig_whois_harvester():
 
 
 def test_whatweb_parse():
-    r = WhatWeb().parse('[{"http_status":200,"plugins":{"HTTPServer":{"string":["nginx"]},"Title":{}}}]', "", {})
-    assert r == {"http_status": 200, "technologies": {"HTTPServer": ["nginx"], "Title": []}}
+    r = WhatWeb().parse('[{"http_status":200,"plugins":{"HTTPServer":{"string":["nginx"]},"Title":{},"IP":{"string":["1.1.1.1"]}}}]', "", {})
+    assert r == {"http_status": 200, "technologies": {"HTTPServer": ["nginx"]}}
 
 
 def test_pasiva_no_exige_alcance_pero_activa_si(tmp_path):
