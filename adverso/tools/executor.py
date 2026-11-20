@@ -17,6 +17,7 @@ from .base import Pin, Tool, ToolError
 from .gobuster import Gobuster
 from .nikto import Nikto
 from .nmap import Nmap
+from .osint import Dig, TheHarvester, WhatWeb, Whois
 
 #: Recibe (herramienta, objetivo, comando) y devuelve True si el humano aprueba.
 Confirm = Callable[[Tool, str, list[str]], bool]
@@ -27,7 +28,7 @@ def deny_all(tool: Tool, target: str, cmd: list[str]) -> bool:
 
 
 def default_tools() -> dict[str, Tool]:
-    return {t.name: t for t in (Nmap(), Gobuster(), Nikto())}
+    return {t.name: t for t in (Nmap(), Gobuster(), Nikto(), Dig(), Whois(), TheHarvester(), WhatWeb())}
 
 
 class Executor:
@@ -55,23 +56,27 @@ class Executor:
             self.audit.record("invalid_args", tool=name, args=args, error=str(e))
             return {"ok": False, "error": str(e)}
 
-        try:
-            ips = self.scope.check(target)
-        except OutOfScope as e:
-            self.audit.record("denied_scope", tool=name, target=target, reason=str(e))
-            return {"ok": False, "error": f"fuera de alcance: {e}"}
-
-        # Anti-TOCTOU: si el objetivo es un nombre, la herramienta recibe la IP que
-        # acabamos de validar y no vuelve a resolverlo.
+        ips: list[str] = []
         pin = None
-        if not _is_ip_or_net(target):
-            if not ips:
-                self.audit.record("denied_scope", tool=name, target=target, reason="no resuelve")
-                return {"ok": False, "error": f"{target} no resuelve a ninguna IP"}
-            pin = Pin(target, ips[0])
-            if not all(self.scope._ip_allowed(i) for i in ips):
-                self.audit.record("named_host_outside_networks", tool=name, target=target, ips=ips)
-        cmd = tool.build_command(args, pin)
+        if tool.passive:
+            cmd = tool.build_command(args)
+        else:
+            try:
+                ips = self.scope.check(target)
+            except OutOfScope as e:
+                self.audit.record("denied_scope", tool=name, target=target, reason=str(e))
+                return {"ok": False, "error": f"fuera de alcance: {e}"}
+
+            # Anti-TOCTOU: si el objetivo es un nombre, la herramienta recibe la IP que
+            # acabamos de validar y no vuelve a resolverlo.
+            if not _is_ip_or_net(target):
+                if not ips:
+                    self.audit.record("denied_scope", tool=name, target=target, reason="no resuelve")
+                    return {"ok": False, "error": f"{target} no resuelve a ninguna IP"}
+                pin = Pin(target, ips[0])
+                if not all(self.scope._ip_allowed(i) for i in ips):
+                    self.audit.record("named_host_outside_networks", tool=name, target=target, ips=ips)
+            cmd = tool.build_command(args, pin)
 
         if tool.intrusive:
             approved = self.confirm(tool, target, cmd)
@@ -79,7 +84,7 @@ class Executor:
             if not approved:
                 return {"ok": False, "error": "acción intrusiva no aprobada por el operador"}
 
-        self.audit.record("run", tool=name, target=target, ips=ips, pinned=pin.ip if pin else None, cmd=cmd)
+        self.audit.record("run", tool=name, target=target, passive=tool.passive, ips=ips, pinned=pin.ip if pin else None, cmd=cmd)
         started = time.time()
         try:
             raw = tool.execute(cmd)

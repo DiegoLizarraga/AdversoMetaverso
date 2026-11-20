@@ -20,13 +20,23 @@ from ..tools.base import Tool
 from ..tools.executor import Executor
 
 
-def ask_operator(tool: Tool, target: str, cmd: list[str]) -> bool:
-    """Confirmación humana en terminal para acciones intrusivas."""
+APPROVAL_TIMEOUT = 60
+
+
+def ask_operator(tool: Tool, target: str, cmd: list[str], timeout: float = APPROVAL_TIMEOUT) -> bool:
+    """Confirmación humana en terminal. Sin respuesta en `timeout` s: DENEGADA."""
+    import select
+
     print(f"\n⚠  ACCIÓN INTRUSIVA: {tool.name} contra {target}\n   $ {' '.join(cmd)}", file=sys.stderr)
     if not sys.stdin.isatty():
         print("   (sin terminal interactiva: denegada)", file=sys.stderr)
         return False
-    return input("   ¿Aprobar? [s/N] ").strip().lower() in ("s", "si", "sí", "y", "yes")
+    print(f"   ¿Aprobar? [s/N] ({int(timeout)} s, sin respuesta = no) ", end="", file=sys.stderr, flush=True)
+    ready, _, _ = select.select([sys.stdin], [], [], timeout)
+    if not ready:
+        print("\n   tiempo agotado: denegada", file=sys.stderr)
+        return False
+    return sys.stdin.readline().strip().lower() in ("s", "si", "sí", "y", "yes")
 
 
 def show(ev: Event) -> None:
@@ -48,7 +58,7 @@ def doctor(scope_path: str, url: str) -> int:
         print(f"{'✓' if good else ('✗' if required else '·')} {what}")
         ok &= good or not required
 
-    for b in ("nmap", "gobuster", "nikto"):
+    for b in ("nmap", "gobuster", "nikto", "dig", "whois", "theHarvester", "whatweb"):
         line(shutil.which(b) is not None, f"herramienta {b}", required=False)
     line(os.path.isfile("/usr/share/wordlists/dirb/common.txt"), "diccionario dirb/common.txt", required=False)
     line(os.path.isfile(scope_path), f"alcance {scope_path}")
@@ -77,11 +87,22 @@ def main(argv: list[str] | None = None) -> int:
         q.add_argument("--state", default="adverso.json")
         if name == "report":
             q.add_argument("--out", help="archivo de salida (por defecto, stdout)")
+    c = sub.add_parser("chat", help="sesión interactiva con comandos / (estilo asistente)")
+    c.add_argument("--scope", default="scope.toml")
+    c.add_argument("--model", default="qwen3:8b")
+    c.add_argument("--state", default="adverso.json")
+    c.add_argument("--ollama-url", default=DEFAULT_URL)
+    c.add_argument("--audit", default="audit.log")
+    c.add_argument("--max-steps", type=int, default=10)
+    c.add_argument("--timeout", type=float, default=600)
     d = sub.add_parser("doctor", help="comprueba herramientas, alcance y modelo")
     d.add_argument("--scope", default="scope.toml")
     d.add_argument("--ollama-url", default=DEFAULT_URL)
     a = p.parse_args(argv)
 
+    if a.cmd == "chat":
+        from .repl import run_chat
+        return run_chat(a)
     if a.cmd == "doctor":
         return doctor(a.scope, a.ollama_url)
     if a.cmd == "palaces":

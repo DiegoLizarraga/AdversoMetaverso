@@ -110,8 +110,31 @@ def ingest(store: Store, tool: str, target: str, pinned_ip: str | None, result: 
                 low = text.lower()
                 kind, score = next(((k, s) for frag, k, s in _NIKTO if frag in low), (K.ANONYMOUS, 30))
                 added += _shadow(p, "nikto", f.get("id") or text[:60], text[:200], kind, score, None)
+    elif tool == "dns_lookup":
+        p = _osint_palace(store, target)
+        for r in result.get("records", []):
+            added += _shadow(p, "dns", f"{r['type']}/{r['data']}", f"{r['type']} {r['data']}", K.WANDERER, 8, r)
+    elif tool == "harvest_domain":
+        p = _osint_palace(store, target)
+        for h in result.get("hosts", []):
+            if h["name"] != target:
+                label = f"{h['name']}" + (f" → {h['ip']}" if h.get("ip") else "")
+                added += _shadow(p, "harvest", h["name"], f"Subdominio {label}", K.ANONYMOUS, 22, h)
+        for e in result.get("emails", []):
+            added += _shadow(p, "harvest", e, f"Correo expuesto {e}", K.SEDUCER, 42, None)
+    elif tool == "whatweb_fingerprint":
+        p = _palace(store, pinned_ip or target, target if target != (pinned_ip or target) else None)
+        for tech, vals in result.get("technologies", {}).items():
+            if tech in ("HTTPServer", "X-Powered-By", "PHP", "WordPress", "Apache", "nginx", "Joomla", "Drupal") or vals:
+                v = " ".join(map(str, vals))
+                added += _shadow(p, "whatweb", tech, f"Tecnología {tech} {v}".strip(), K.ANONYMOUS, 28 if v else 18, vals)
     store.save()
     return added
+
+
+def _osint_palace(store: Store, domain: str) -> dict[str, Any]:
+    """Un dominio investigado de forma pasiva es un Palacio más (clave: el dominio)."""
+    return _palace(store, domain, None)
 
 
 def palace_score(p: dict[str, Any]) -> int:

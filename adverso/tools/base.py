@@ -73,6 +73,9 @@ class Tool:
     description: str = ""
     #: Una herramienta intrusiva exige confirmación humana antes de ejecutarse.
     intrusive: bool = False
+    #: Pasiva: consulta a terceros, no al objetivo. Se salta la guardia de alcance
+    #: (el nombre se valida igualmente y todo queda auditado).
+    passive: bool = False
     timeout: int = 300
     #: JSON Schema de los argumentos que ve el agente.
     parameters: dict[str, Any] = {}
