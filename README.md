@@ -37,4 +37,6 @@ En `chat`: texto libre = tarea para el agente; `/palacios /sombras /informe /alc
   datos, nunca como instrucciones; máximo 3 llamadas por turno.
 - **Persistencia:** `adverso.json` (Palacios y Sombras), escritura atómica.
 
+Solo Linux (Kali/Debian): no hay ni habrá soporte para Windows.
+
 La app Android original vive en `legacy/android/`. Hoja de ruta en `PLAN.md`.
