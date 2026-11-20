@@ -4,7 +4,7 @@ import os
 import re
 from typing import Any
 
-from .base import Tool, ToolError, require_str
+from .base import Pin, Tool, ToolError, host_header, require_str, swap_host, url_host, url_parts
 
 DEFAULT_WORDLIST = "/usr/share/wordlists/dirb/common.txt"
 _LINE = re.compile(r"^(?P<path>/?\S+)\s+(?:\(Status: (?P<st>\d+)\)\s*)?(?:\[Size: (?P<size>\d+)\])?(?:\s*\[--> (?P<redir>\S+)\])?")
@@ -27,13 +27,9 @@ class Gobuster(Tool):
     }
 
     def target_of(self, args):
-        url = require_str(args, "url")
-        m = re.match(r"^https?://([^/:?#]+|\[[0-9a-fA-F:]+\])", url)
-        if not m:
-            raise ToolError("url debe empezar por http:// o https://")
-        return m.group(1).strip("[]")
+        return url_host(require_str(args, "url"))
 
-    def build_command(self, args):
+    def build_command(self, args, pin: Pin | None = None):
         url = require_str(args, "url")
         self.target_of(args)
         wl = args.get("wordlist") or DEFAULT_WORDLIST
@@ -42,7 +38,13 @@ class Gobuster(Tool):
         threads = int(args.get("threads", 5))
         if not 1 <= threads <= 20:
             raise ToolError("threads fuera de rango (1-20)")
-        return ["gobuster", "dir", "-u", url, "-w", wl, "-q", "--no-color", "-t", str(threads)]
+        cmd = ["gobuster", "dir", "-w", wl, "-q", "--no-color", "-t", str(threads)]
+        if pin:
+            cmd += ["-H", f"Host: {host_header(url)}"]
+            if url_parts(url).scheme == "https":
+                cmd += ["-k"]  # el certificado es del nombre, no de la IP
+            url = swap_host(url, pin.ip)
+        return [*cmd, "-u", url]
 
     def parse(self, stdout, stderr, args):
         found = []

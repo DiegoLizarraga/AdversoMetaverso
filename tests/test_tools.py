@@ -81,7 +81,7 @@ class FakeNmap(Nmap):
 
 
 class FakeGobuster(Gobuster):
-    def build_command(self, args):
+    def build_command(self, args, pin=None):
         return ["gobuster", "fake"]
 
     def execute(self, cmd):

@@ -1,13 +1,19 @@
-"""CLI: `python -m adverso recon "tarea" --scope scope.toml --model qwen3:30b`."""
+"""CLI: recon (agente), palaces, report, doctor."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 import sys
+import urllib.request
 
 from ..agents.base import Agent, Event
 from ..agents.ollama import DEFAULT_URL, OllamaClient
+from ..core.findings import palace_rank, palace_score
+from ..core.store import Store
+from ..reports.card import render_markdown
 from ..scope.audit import AuditLog
 from ..scope.guard import Scope
 from ..tools.base import Tool
@@ -33,18 +39,62 @@ def show(ev: Event) -> None:
         print(f"! {ev.data['error']}", file=sys.stderr)
 
 
+def doctor(scope_path: str, url: str) -> int:
+    """Diagnóstico: qué falta para operar. Devuelve 0 si todo lo necesario está."""
+    ok = True
+
+    def line(good: bool, what: str, required: bool = True) -> None:
+        nonlocal ok
+        print(f"{'✓' if good else ('✗' if required else '·')} {what}")
+        ok &= good or not required
+
+    for b in ("nmap", "gobuster", "nikto"):
+        line(shutil.which(b) is not None, f"herramienta {b}", required=False)
+    line(os.path.isfile("/usr/share/wordlists/dirb/common.txt"), "diccionario dirb/common.txt", required=False)
+    line(os.path.isfile(scope_path), f"alcance {scope_path}")
+    try:
+        urllib.request.urlopen(url.rstrip("/") + "/api/tags", timeout=3).close()
+        line(True, f"Ollama en {url}")
+    except Exception:
+        line(False, f"Ollama en {url}")
+    return 0 if ok else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="adverso")
     sub = p.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("recon", help="reconocimiento guiado por un agente")
     r.add_argument("task", help='ej. "Reconoce 192.168.56.10 y dime qué servicios expone"')
     r.add_argument("--scope", default="scope.toml")
-    r.add_argument("--model", default="qwen3:30b")
+    r.add_argument("--model", default="qwen3:8b")
+    r.add_argument("--state", default="adverso.json", help="JSON de persistencia (Palacios y Sombras)")
     r.add_argument("--ollama-url", default=DEFAULT_URL)
     r.add_argument("--audit", default="audit.log")
     r.add_argument("--max-steps", type=int, default=10)
     r.add_argument("--timeout", type=float, default=600, help="segundos por respuesta del modelo")
+    for name, helptext in (("palaces", "lista los Palacios conocidos"), ("report", "genera el informe en Markdown")):
+        q = sub.add_parser(name, help=helptext)
+        q.add_argument("--state", default="adverso.json")
+        if name == "report":
+            q.add_argument("--out", help="archivo de salida (por defecto, stdout)")
+    d = sub.add_parser("doctor", help="comprueba herramientas, alcance y modelo")
+    d.add_argument("--scope", default="scope.toml")
+    d.add_argument("--ollama-url", default=DEFAULT_URL)
     a = p.parse_args(argv)
+
+    if a.cmd == "doctor":
+        return doctor(a.scope, a.ollama_url)
+    if a.cmd == "palaces":
+        for pl in sorted(Store(a.state).palaces.values(), key=palace_score, reverse=True):
+            print(f"{pl['ip']:<40} {palace_rank(pl).label:<9} {palace_score(pl):>3}  {len(pl['findings'])} sombras")
+        return 0
+    if a.cmd == "report":
+        text = render_markdown(Store(a.state))
+        if a.out:
+            open(a.out, "w", encoding="utf8").write(text)
+        else:
+            print(text)
+        return 0
 
     try:
         scope = Scope.load(a.scope)
@@ -52,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"No existe {a.scope}. Copia scope.example.toml y declara tus objetivos autorizados.", file=sys.stderr)
         return 2
     client = OllamaClient(a.model, a.ollama_url, timeout=a.timeout)
-    agent = Agent(client, Executor(scope, AuditLog(a.audit), confirm=ask_operator),
+    agent = Agent(client, Executor(scope, AuditLog(a.audit), confirm=ask_operator, store=Store(a.state)),
                   max_steps=a.max_steps, on_event=show)
     result = agent.run(a.task)
     print(result.final)

@@ -23,3 +23,5 @@ __pycache__/
 adverso.db
 audit.log
 scope.toml
+adverso.json
+adverso.json.corrupto-*

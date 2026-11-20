@@ -4,7 +4,7 @@ import re
 import xml.etree.ElementTree as ET
 from typing import Any
 
-from .base import Tool, ToolError, require_str
+from .base import Pin, Tool, ToolError, require_str
 
 # Perfiles cerrados: el agente elige uno, nunca pasa flags arbitrarios.
 PROFILES: dict[str, list[str]] = {
@@ -38,7 +38,7 @@ class Nmap(Tool):
             raise ToolError(f"target no lleva puerto: usa target='{host}' y ports='{port}'")
         return t
 
-    def build_command(self, args):
+    def build_command(self, args, pin: Pin | None = None):
         profile = args.get("profile", "rapido")
         if profile not in PROFILES:
             raise ToolError(f"perfil desconocido: {profile}")
@@ -50,7 +50,7 @@ class Nmap(Tool):
             cmd += ["-p", str(ports)]
         elif profile == "completo":
             cmd += ["-p-"]
-        return [*cmd, "--", require_str(args, "target")]
+        return [*cmd, "--", pin.ip if pin else require_str(args, "target")]
 
     def parse(self, stdout, stderr, args):
         try:

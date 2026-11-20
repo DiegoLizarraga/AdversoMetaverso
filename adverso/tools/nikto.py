@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from .base import Tool, ToolError, require_str
+from .base import Pin, Tool, ToolError, require_str, swap_host, url_host
 
 _ITEM = re.compile(r"^\+ (?:\[(?P<id>\d+)\] )?(?P<text>.+)$")
 _NOISE_START = ("Target ", "Start Time", "End Time", "Platform:")
@@ -25,20 +25,20 @@ class Nikto(Tool):
     }
 
     def target_of(self, args):
-        url = require_str(args, "url")
-        m = re.match(r"^https?://([^/:?#]+|\[[0-9a-fA-F:]+\])", url)
-        if not m:
-            raise ToolError("url debe empezar por http:// o https://")
-        return m.group(1).strip("[]")
+        return url_host(require_str(args, "url"))
 
-    def build_command(self, args):
+    def build_command(self, args, pin: Pin | None = None):
         url = require_str(args, "url")
         self.target_of(args)
         secs = int(args.get("max_seconds", 120))
         if not 10 <= secs <= 600:
             raise ToolError("max_seconds fuera de rango (10-600)")
         # stdin cerrado por Tool.execute: nikto nunca puede enviar datos a CIRT.net.
-        return ["nikto", "-h", url, "-nointeractive", "-maxtime", f"{secs}s"]
+        cmd = ["nikto", "-nointeractive", "-maxtime", f"{secs}s"]
+        if pin:
+            cmd += ["-vhost", pin.host]
+            url = swap_host(url, pin.ip)
+        return [*cmd, "-h", url]
 
     def parse(self, stdout, stderr, args):
         findings = []
