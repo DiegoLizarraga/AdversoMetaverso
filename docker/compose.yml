@@ -1,0 +1,55 @@
+# Laboratorio cerrado para probar adverso de punta a punta.
+#
+#   kali      herramienta + opencode (el repo se monta en /work)
+#   ollama    modelo local (perfil "agente": solo si se pide)
+#   objetivo  servidor web del laboratorio, el único objetivo autorizado
+#
+#   docker compose -f docker/compose.yml run --rm kali python3 -m pytest -q
+#   docker compose -f docker/compose.yml --profile agente up -d ollama objetivo
+#   docker compose -f docker/compose.yml run --rm kali python3 -m adverso doctor --scope docker/scope.lab.toml
+name: adverso
+
+networks:
+  lab:
+    ipam:
+      config:
+        - subnet: 172.30.56.0/24
+
+volumes:
+  ollama:
+
+services:
+  kali:
+    build: .
+    image: adverso-kali
+    volumes:
+      - ..:/work
+    working_dir: /work
+    environment:
+      ADVERSO_OLLAMA_URL: http://ollama:11434
+    networks:
+      lab:
+        ipv4_address: 172.30.56.2
+    stdin_open: true
+    tty: true
+
+  objetivo:
+    image: nginx:alpine
+    networks:
+      lab:
+        ipv4_address: 172.30.56.10
+
+  ollama:
+    image: ollama/ollama
+    profiles: ["agente"]
+    volumes:
+      - ollama:/root/.ollama
+    environment:
+      # opencode añade su propio prompt: hace falta más contexto que el de serie.
+      OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-12288}
+      OLLAMA_FLASH_ATTENTION: "1"
+      OLLAMA_KV_CACHE_TYPE: q8_0   # caché KV a la mitad de memoria
+      OLLAMA_KEEP_ALIVE: "30m"
+    networks:
+      lab:
+        ipv4_address: 172.30.56.3

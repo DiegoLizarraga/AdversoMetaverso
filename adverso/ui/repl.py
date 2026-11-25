@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Callable
 
-from ..agents.base import Agent
+from ..agents.base import Runner
 from ..core.findings import palace_rank, palace_score
 from ..core.models import ShadowKind
 from ..core.store import Store
@@ -28,7 +28,7 @@ o usa un comando:
 
 
 class Repl:
-    def __init__(self, agent: Agent, executor: Executor, store: Store, audit_path: str | Path,
+    def __init__(self, agent: Runner, executor: Executor, store: Store, audit_path: str | Path,
                  out: Callable[[str], None] = print) -> None:
         self.agent, self.executor, self.store = agent, executor, store
         self.audit_path = Path(audit_path)
@@ -112,9 +112,8 @@ class Repl:
 
 
 def run_chat(a) -> int:
-    from ..agents.ollama import OllamaClient
     from ..scope.guard import Scope
-    from .cli import ask_operator, show
+    from .cli import ask_operator, build_agent
 
     try:
         scope = Scope.load(a.scope)
@@ -123,9 +122,8 @@ def run_chat(a) -> int:
         return 2
     store = Store(a.state)
     executor = Executor(scope, AuditLog(a.audit), confirm=ask_operator, store=store)
-    agent = Agent(OllamaClient(a.model, a.ollama_url, timeout=a.timeout), executor, max_steps=a.max_steps, on_event=show)
-    repl = Repl(agent, executor, store, a.audit)
-    print("AdversoMetaverso — /ayuda para ver comandos.")
+    repl = Repl(build_agent(a, executor), executor, store, a.audit)
+    print(f"AdversoMetaverso ({a.backend}) — /ayuda para ver comandos.")
     while True:
         try:
             line = input("\n☾ ")

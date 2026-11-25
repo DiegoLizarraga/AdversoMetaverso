@@ -3,11 +3,23 @@
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.request
 from typing import Any
 
-DEFAULT_URL = "http://127.0.0.1:11434"
+DEFAULT_URL = os.environ.get("ADVERSO_OLLAMA_URL", "http://127.0.0.1:11434")
+
+
+def _to_ollama(m: dict[str, Any]) -> dict[str, Any]:
+    """Formato canónico → API de Ollama (argumentos como objeto; resultado por nombre)."""
+    if m.get("role") == "tool":
+        return {"role": "tool", "tool_name": m.get("tool_name", ""), "content": m.get("content", "")}
+    if m.get("tool_calls"):
+        return {"role": m["role"], "content": m.get("content", ""),
+                "tool_calls": [{"function": {"name": tc["function"]["name"], "arguments": tc["function"]["arguments"]}}
+                               for tc in m["tool_calls"]]}
+    return m
 
 
 class OllamaClient:
@@ -43,7 +55,7 @@ class OllamaClient:
     def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": self.model,
-            "messages": messages,
+            "messages": [_to_ollama(m) for m in messages],
             "stream": False,
             "options": {"num_ctx": self.num_ctx, "temperature": 0.2},
         }

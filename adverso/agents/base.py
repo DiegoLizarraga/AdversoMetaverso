@@ -17,15 +17,30 @@ from ..tools.executor import Executor
 
 MAX_RESULT_CHARS = 6000
 MAX_CALLS_PER_TURN = 3
+REPEATED = "llamada repetida: usa otro enfoque o termina con el informe"
 
 
 class LLMClient(Protocol):
+    """Habla con un modelo. Los mensajes van en formato canónico y cada cliente
+    los traduce a su API:
+
+    - asistente: {"role": "assistant", "content": str,
+                  "tool_calls": [{"id": str, "function": {"name": str, "arguments": dict}}]}
+    - resultado: {"role": "tool", "tool_call_id": str, "tool_name": str, "content": str}
+    """
+
     #: True si el modelo soporta tool calling nativo.
     native_tools: bool
 
     def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None) -> dict[str, Any]:
         """Devuelve el mensaje del asistente: {"content": str, "tool_calls": [...]}."""
         ...
+
+
+class Runner(Protocol):
+    """Lo que la CLI y el REPL necesitan de un agente (el nuestro u opencode)."""
+
+    def run(self, task: str) -> "AgentResult": ...
 
 
 @dataclass
@@ -63,9 +78,20 @@ Herramientas disponibles:
 """
 
 
+def strip_think(text: str) -> str:
+    """Quita el razonamiento <think>…</think> que algunos modelos dejan en el texto.
+
+    Los modelos "thinking" (p. ej. Qwen3-2507) traen el <think> ya abierto en la
+    plantilla: en la salida solo aparece el cierre, con el razonamiento delante.
+    """
+    if "</think>" in text:
+        text = text.rsplit("</think>", 1)[1]
+    return re.sub(r"<think>.*?(</think>|$)", "", text, flags=re.S).strip()
+
+
 def extract_json(text: str) -> dict[str, Any] | None:
     """Primer objeto JSON equilibrado dentro de un texto (tolera ``` y prosa)."""
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.S)
+    text = strip_think(text)
     start = text.find("{")
     while start != -1:
         depth = 0
@@ -98,7 +124,12 @@ def extract_json(text: str) -> dict[str, Any] | None:
     return None
 
 
-def _clip(result: dict[str, Any]) -> str:
+def call_key(name: str, args: Any) -> str:
+    """Identidad de una llamada, para detectar repeticiones."""
+    return f"{name}:{json.dumps(args, sort_keys=True, default=str)}"
+
+
+def clip_result(result: dict[str, Any]) -> str:
     s = json.dumps(result, ensure_ascii=False)
     if len(s) > MAX_RESULT_CHARS:
         s = s[:MAX_RESULT_CHARS] + f'... [truncado, {len(s)} caracteres en total]'
@@ -145,24 +176,25 @@ class Agent:
                 return AgentResult(f"Error del modelo: {e}", step, events, False)
 
             content = (msg.get("content") or "").strip()
-            calls: list[tuple[str, dict[str, Any]]] = []
+            calls: list[tuple[str, str, Any]] = []  # (id, nombre, argumentos)
             if native:
-                for tc in msg.get("tool_calls") or []:
-                    fn = tc.get("function", {})
+                content = strip_think(content)
+                for i, tc in enumerate(msg.get("tool_calls") or []):
+                    fn = tc.get("function") or {}
                     args = fn.get("arguments") or {}
                     if isinstance(args, str):
                         try:
                             args = json.loads(args)
                         except json.JSONDecodeError:
                             args = {}
-                    calls.append((fn.get("name", ""), args))
+                    calls.append((str(tc.get("id") or f"call_{step}_{i}"), str(fn.get("name", "")), args))
             else:
                 obj = extract_json(content)
                 if obj and "final" in obj:
                     self._emit(events, "final", text=str(obj["final"]))
                     return AgentResult(str(obj["final"]), step, events, True)
                 if obj and "tool" in obj:
-                    calls.append((str(obj["tool"]), obj.get("args") or {}))
+                    calls.append((f"call_{step}_0", str(obj["tool"]), obj.get("args") or {}))
 
             if content:
                 self._emit(events, "assistant", text=content)
@@ -183,21 +215,25 @@ class Agent:
             if len(calls) > MAX_CALLS_PER_TURN:
                 self._emit(events, "error", error=f"{len(calls)} llamadas en un turno: se ejecutan solo {MAX_CALLS_PER_TURN}")
                 calls = calls[:MAX_CALLS_PER_TURN]
-            messages.append({"role": "assistant", "content": content,
-                             **({"tool_calls": msg.get("tool_calls")} if native else {})})
-            for name, args in calls:
-                key = f"{name}:{json.dumps(args, sort_keys=True, default=str)}"
+            # Solo constan las llamadas que se ejecutan: las APIs tipo OpenAI exigen
+            # un resultado por cada tool_call del mensaje del asistente.
+            assistant: dict[str, Any] = {"role": "assistant", "content": content}
+            if native:
+                assistant["tool_calls"] = [{"id": cid, "function": {"name": n, "arguments": a}} for cid, n, a in calls]
+            messages.append(assistant)
+            for cid, name, args in calls:
+                key = call_key(name, args)
                 self._emit(events, "tool_call", name=name, args=args)
                 if key in seen:
-                    result = {"ok": False, "error": "llamada repetida: usa otro enfoque o termina con el informe"}
+                    result = {"ok": False, "error": REPEATED}
                 else:
                     seen.add(key)
                     result = self.executor.run(name, args)
                 self._emit(events, "tool_result", name=name, ok=result.get("ok", False), result=result)
                 if native:
-                    messages.append({"role": "tool", "tool_name": name, "content": _clip(result)})
+                    messages.append({"role": "tool", "tool_call_id": cid, "tool_name": name, "content": clip_result(result)})
                 else:
-                    messages.append({"role": "user", "content": f"Resultado de {name}: {_clip(result)}"})
+                    messages.append({"role": "user", "content": f"Resultado de {name}: {clip_result(result)}"})
 
         text = "Se alcanzó el límite de pasos sin informe final."
         self._emit(events, "error", error=text)

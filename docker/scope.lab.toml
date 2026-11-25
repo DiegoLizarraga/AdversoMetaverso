@@ -1,0 +1,3 @@
+# Alcance del laboratorio de docker/compose.yml: solo la red interna del lab.
+[scope]
+targets = ["172.30.56.0/24"]

@@ -98,6 +98,21 @@ def test_error_del_modelo_no_rompe(tmp_path):
     assert not r.completed and "ollama caído" in r.final
 
 
+def test_strip_think_con_y_sin_apertura():
+    from adverso.agents.base import strip_think
+    assert strip_think("<think>pienso</think>\nInforme") == "Informe"
+    # plantilla con <think> ya abierto: solo llega el cierre
+    assert strip_think("razono mucho...\n</think>\n\nHost: 10.0.0.5") == "Host: 10.0.0.5"
+    assert strip_think("<think>sin cerrar") == ""
+    assert strip_think("texto normal") == "texto normal"
+
+
+def test_modo_nativo_limpia_razonamiento_del_final(tmp_path):
+    c = ScriptedClient([{"content": "Debo revisar...\n</think>\n\nNada abierto."}])
+    r = make(tmp_path, c).run("x")
+    assert r.final == "Nada abierto."
+
+
 def test_extract_json_tolerante():
     assert extract_json('<think>{"a":1}</think> texto {"tool":"x","args":{"k":"}"}} fin') == {"tool": "x", "args": {"k": "}"}}
     assert extract_json("sin json") is None

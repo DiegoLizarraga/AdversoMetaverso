@@ -37,6 +37,10 @@ class Store:
                 pass
         return {"version": VERSION, "palaces": {}}
 
+    def reload(self) -> None:
+        """Relee el archivo: otro proceso (el servidor MCP) puede haberlo actualizado."""
+        self.data = self._load()
+
     @property
     def palaces(self) -> dict[str, Any]:
         return self.data["palaces"]
