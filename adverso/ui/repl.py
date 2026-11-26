@@ -45,6 +45,7 @@ class Repl:
             return True
         cmd, _, arg = line[1:].partition(" ")
         arg = arg.strip()
+        self.store.reload()  # el monitor o el agente pueden haber escrito desde otro proceso
         fn = getattr(self, f"cmd_{cmd.lower()}", None)
         if cmd.lower() in ("salir", "exit", "quit"):
             return False
@@ -103,11 +104,11 @@ class Repl:
                 self.out(raw)
 
     def cmd_olvida(self, arg: str) -> None:
-        if arg == "todo":
-            self.store.palaces.clear()
-        elif self.store.palaces.pop(arg, None) is None:
-            return self.out("Uso: /olvida <ip|dominio> o /olvida todo")
-        self.store.save()
+        with self.store.transaction():
+            if arg == "todo":
+                self.store.palaces.clear()
+            elif self.store.palaces.pop(arg, None) is None:
+                return self.out("Uso: /olvida <ip|dominio> o /olvida todo")
         self.out("Hecho.")
 
 

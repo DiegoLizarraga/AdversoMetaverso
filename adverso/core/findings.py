@@ -11,7 +11,7 @@ import hashlib
 import time
 from typing import Any
 
-from .models import PalaceRank, ShadowKind as K, ThreatTier
+from .models import PalaceRank, ShadowKind as K, ThreatTier, Verdict
 from .store import Store
 from .threat import codename_for
 
@@ -84,6 +84,11 @@ def _shadow(p: dict[str, Any], source: str, key: str, title: str, kind: K, score
 
 def ingest(store: Store, tool: str, target: str, pinned_ip: str | None, result: dict[str, Any]) -> int:
     """Vuelca el resultado de una herramienta en el Store. Devuelve las Sombras nuevas."""
+    with store.transaction():  # otros procesos pueden estar escribiendo a la vez
+        return _ingest(store, tool, target, pinned_ip, result)
+
+
+def _ingest(store: Store, tool: str, target: str, pinned_ip: str | None, result: dict[str, Any]) -> int:
     added = 0
     if tool == "nmap_scan":
         for h in result.get("hosts", []):
@@ -128,8 +133,33 @@ def ingest(store: Store, tool: str, target: str, pinned_ip: str | None, result: 
             if tech in ("HTTPServer", "X-Powered-By", "PHP", "WordPress", "Apache", "nginx", "Joomla", "Drupal") or vals:
                 v = " ".join(map(str, vals))
                 added += _shadow(p, "whatweb", tech, f"Tecnología {tech} {v}".strip(), K.ANONYMOUS, 28 if v else 18, vals)
-    store.save()
     return added
+
+
+def ingest_dns(store: Store, palace: str, domain: str, verdict: Verdict, count: int, qtypes: list[str],
+               ips: list[str], process: str | None, ts: float) -> bool:
+    """Consultas observadas por el monitor. Llamar dentro de `store.transaction()`.
+
+    Una Sombra por (Palacio, dominio); las repeticiones suman consultas. Devuelve
+    True si la Sombra es nueva.
+    """
+    p = _palace(store, palace, None)
+    fid = _fid(palace, "monitor", domain)
+    f = p["findings"].get(fid)
+    if f is None:
+        f = p["findings"][fid] = {
+            "id": fid, "source": "monitor", "codename": verdict.codename, "first_seen": ts,
+            "evidence": {"consultas": 0, "tipos": [], "ips": [], "motivos": [], "proceso": process},
+        }
+    ev = f["evidence"]
+    ev["consultas"] = ev.get("consultas", 0) + count
+    ev["tipos"] = sorted(set(ev.get("tipos", [])) | set(qtypes))
+    ev["ips"] = sorted(set(ev.get("ips", [])) | set(ips))[:16]
+    ev["motivos"] = verdict.reasons
+    ev["proceso"] = process or ev.get("proceso")
+    f.update(title=f"{domain}: {verdict.category}", kind=verdict.kind.name, score=verdict.score,
+             last_seen=max(ts, f.get("last_seen", 0)))
+    return ev["consultas"] == count
 
 
 def _osint_palace(store: Store, domain: str) -> dict[str, Any]:

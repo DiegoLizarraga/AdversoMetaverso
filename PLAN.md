@@ -44,7 +44,7 @@ legacy/android/   app original (referencia)
 | 1 | Capa de herramientas (nmap, gobuster, nikto) + guardia de alcance | Escaneo fuera de alcance rechazado; dentro, auditado ✅ |
 | 2 | Agente con modelo local | Un modelo pequeño completa un reconocimiento guiado ✅ (qwen3:8b vía Ollama, ~90 s en CPU) |
 | 3 | Adaptador opencode + cliente OpenAI-compatible | Misma tarea con otro agente ✅ (opencode 1.19.6 + qwen3:4b-instruct, ~4 min en CPU) |
-| 4 | Monitor pasivo y TUI | Palacios y Sombras visibles en vivo |
+| 4 | Monitor pasivo y TUI | Palacios y Sombras visibles en vivo ✅ (TUI + captura real en el laboratorio, con nmap escribiendo a la vez) |
 | 5 | Más herramientas | masscan, ffuf, nuclei, tshark… cubiertas (el servidor MCP propio ya existe: fase 3) |
 | 6 | Claude | Al final |
 
@@ -69,3 +69,22 @@ legacy/android/   app original (referencia)
 - Docker (8 GB): `qwen3:4b` es la variante 2507 Thinking (razona siempre, ~15 min por tarea); `qwen3:4b-instruct`
   hace lo mismo en 3-6 min. `qwen3:8b` no cabe con holgura junto al resto de contenedores.
 - Pendiente: probar opencode con un proveedor remoto (sin redefinir `provider`), y con `qwen3:8b` en una máquina con más memoria.
+
+## Notas de la fase 4
+- Monitor sin dependencias: socket `AF_PACKET`/`SOCK_DGRAM` (la cabecera de enlace no importa), lector de
+  pcap y pcapng, DNS con compresión acotada y nombres saneados. En `lo` cada paquete se ve dos veces: se
+  descarta la copia saliente. Duplicados por puente/NAT/retransmisión: misma (id, nombre, tipo) en 2 s.
+- El Palacio del monitor es quien pregunta: `local/<proceso>`, `local` o la IP del cliente. Atribución por
+  `/proc` (socket UDP → inode → fd); se miran primero los procesos que ya consultaron (17/17 con un proceso
+  de larga vida en el laboratorio). Procesos efímeros con respuesta cacheada pueden quedar en `local`.
+- Al Store solo va lo que llega a `--min-score` (40); el resto solo se muestra. Volcado cada 2 s por un
+  hilo propio: si dependiera del siguiente paquete, en una red tranquila no se vería nada en vivo.
+- `Store.transaction()`: `flock` + releer + escribir atómico. Con varios escritores (agente, MCP, monitor)
+  el `save()` anterior perdía actualizaciones y resucitaba Palacios borrados.
+- Docker: el DNS interno (`127.0.0.11`) se reescribe por DNAT a un puerto aleatorio antes de pasar por `lo`;
+  se reconoce por la IP. `adverso monitor` trata SIGTERM como Ctrl+C (vuelca y audita el cierre).
+- TUI con Textual 8.2.8 (paquete de Kali). Todo texto ajeno va como `Text`, nunca como markup. Se revisó
+  con capturas de pantalla (`export_screenshot` → `rsvg-convert`); ojo: rsvg come los espacios iniciales de
+  cada tramo, es un artefacto del renderizado, no de la TUI.
+- Pendiente: conexiones (/proc/net/tcp ↔ IPs de las respuestas DNS), filtro BPF en el núcleo para redes con
+  mucho tráfico, y lanzar tareas del agente desde la propia TUI (con la confirmación como diálogo).

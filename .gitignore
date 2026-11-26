@@ -25,3 +25,5 @@ audit.log
 scope.toml
 adverso.json
 adverso.json.corrupto-*
+adverso.json.lock
+adverso.json.tmp*

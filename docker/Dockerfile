@@ -25,4 +25,11 @@ FROM base
 ARG OPENCODE_VERSION=1.19.6
 RUN npm install -g --allow-scripts=opencode-ai "opencode-ai@${OPENCODE_VERSION}" && opencode --version
 
+# Fase 4: TUI (Textual), tcpdump para capturas de prueba y rsvg-convert para revisar
+# capturas de pantalla de la TUI. Capa aparte, después de opencode: cambiarla no
+# obliga a volver a descargar opencode.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-textual tcpdump librsvg2-bin \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /work
